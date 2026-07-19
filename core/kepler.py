@@ -9,23 +9,18 @@ import mlx.core as mx
 from mlxoplanet.types import Array
 
 
-def kepler(M: Array, ecc: Array) -> tuple[Array, Array]:
-    """Solve Kepler's equation to compute the true anomaly."""
-
-    return _kepler(M, ecc)
-
-
 @mx.custom_function
-def _kepler(M: Array, ecc: Array) -> tuple[Array, Array]:
+def kepler(M: Array, ecc: Array) -> tuple[Array, Array]:
     M = mx.remainder(M, 2 * math.pi)
 
-    high = M > math.pi
-    M = mx.where(high, 2 * math.pi - M, M)
+    # since Kepler's equation is symmetric about pi, we can solve the reflected problem then reflect E back below
+    reflected = M > math.pi
+    M = mx.where(reflected, 2 * math.pi - M, M)
 
     ome = 1 - ecc
     E = starter(M, ecc, ome)
     E = refine(M, ecc, ome, E)
-    E = mx.where(high, 2 * math.pi - E, E)
+    E = mx.where(reflected, 2 * math.pi - E, E)
 
     tan_half_f = mx.sqrt((1 + ecc) / (1 - ecc)) * mx.tan(0.5 * E)
     tan2_half_f = mx.square(tan_half_f)
@@ -36,11 +31,11 @@ def _kepler(M: Array, ecc: Array) -> tuple[Array, Array]:
     return sinf, cosf
 
 
-@_kepler.jvp
-def _kepler_jvp(primals, tangents):
+@kepler.jvp
+def kepler_jvp(primals, tangents):
     M, e = primals
     M_dot, e_dot = tangents
-    sinf, cosf = _kepler(M, e)
+    sinf, cosf = kepler(M, e)
 
     ecosf = e * cosf
     ome2 = 1 - e**2
